@@ -1,0 +1,9 @@
+[Unit]
+Description=Laptop battery to NUT-ups converter
+After=nut-server.service nut-client.service
+
+[Service]
+ExecStart=/usr/sbin/laptopbat2ups
+
+[Install]
+WantedBy=multi-user.target
