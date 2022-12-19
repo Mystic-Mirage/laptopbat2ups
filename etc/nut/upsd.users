@@ -1,0 +1,9 @@
+
+[upsMonitorMasterUser]
+  password = upsMonitorMasterUserPasswd
+  upsmon master
+
+[upsMonitorSlaveUser]
+  password = upsMonitorSlaveUserPasswd
+  upsmon slave
+

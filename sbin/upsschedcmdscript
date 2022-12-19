@@ -1,0 +1,64 @@
+#!/bin/sh
+
+unset LANG LANGUAGE LC_ALL
+LC_ALL=C
+export LC_ALL
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+date=`date`
+
+cmd=`basename "${0}"`
+
+if [ ${#} -eq 0 ]
+  then
+    arg1='?'
+  else
+    arg1="${1}"
+    shift
+  fi
+args="${arg1}"
+while [ ${#} -gt 0 ]; do
+  args="${args} ${1}"
+  shift
+  done
+
+case "${arg1}" in
+  commbad )
+    # echo "${date}: ${cmd}: ${arg1} state detected" | mailx -s "UPS state ${arg1}" root
+    ;;
+  no-contact-shutdown )
+    # echo "${date}: ${cmd}: ${arg1} timer elapsed, will shutdown now" | mailx -s "UPS state ${arg1}" root
+    sleep 5
+    upsmon -c fsd
+    ;;
+  commok | online )
+    powerdownflag=''
+    if [ -e /etc/nut/upsmon.conf ]; then
+      powerdownflag=`cat /etc/nut/upsmon.conf     \
+        | sed 's,#.*$,,'                          \
+        | awk 'BEGIN{f="";}                       \
+                    {if(NF!=2)next;               \
+                     if($1!="POWERDOWNFLAG")next; \
+                     f=$2;exit;}                  \
+                 END{if(length(f)>0)print f;}'`
+      fi
+    if [ -n "${powerdownflag}" ]; then
+      if [ -e "${powerdownflag}" ]; then
+        rm "${powerdownflag}"
+        fi
+      fi
+    # echo "${date}: ${cmd}: ${arg1} state detected" | mailx -s "UPS state ${arg1}" root
+    ;;
+  fsd | lowbatt | nocomm | onbatt | replbatt | shutdown )
+    # echo "${date}: ${cmd}: ${arg1} state detected" | mailx -s "UPS state ${arg1}" root
+    ;;
+  * )
+    # echo "${date}: ${cmd}: Unrecognized: ${args}" | mailx -s "UPS state ${arg1}" root
+    logger -it ${cmd} "Unrecognized command: ${args}"
+    ;;
+  esac
+
+exit 0
+

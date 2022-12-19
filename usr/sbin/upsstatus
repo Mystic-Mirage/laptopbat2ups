@@ -1,0 +1,142 @@
+#!/bin/sh
+
+unset LANG LANGUAGE LC_ALL
+LC_ALL=C
+export LC_ALL
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+ups="ups1@localhost"
+
+upsc=`upsc ${ups} 2>&1` || exit 1
+
+echo "${upsc}"                                                                               \
+  | sed 's,:  *#|#|,: ,'                                                                     \
+  | awk 'BEGIN{dummy1=0;                                                                     \
+               ambienthumidity=-2;                                                           \
+               ambienttemperature=-101;                                                      \
+               batterycharge=0;                                                              \
+               batterychargelow=0;                                                           \
+               batteryruntime=0;                                                             \
+               batteryruntimelow=0;                                                          \
+               outlet1status="";                                                             \
+               outlet2status="";                                                             \
+               upsdate="";                                                                   \
+               upsload=0;                                                                    \
+               upsmodel="";                                                                  \
+               upspowernominal=0;                                                            \
+               upsrealpower=0;                                                               \
+               upsrealpowernominal=0;                                                        \
+               upsstatus="";                                                                 \
+               upstime="";                                                                   \
+               myupsonbattery=0;                                                             \
+               myupscharging=0;                                                              \
+               myupsdischarging=0;                                                           \
+               myupsisoff=0;                                                                 \
+               dummy2=0;}                                                                    \
+              {if(NF<2)next;                                                                 \
+               if($1=="ambient.humidity:")ambienthumidity=$2;                                \
+               if($1=="ambient.temperature:")ambienttemperature=$2;                          \
+               if($1=="battery.charge:")batterycharge=$2;                                    \
+               if($1=="battery.charge.low:")batterychargelow=$2;                             \
+               if($1=="battery.runtime:")batteryruntime=$2;                                  \
+               if($1=="battery.runtime.low:")batteryruntimelow=$2;                           \
+               if($1=="outlet.1.status:")outlet1status=$2;                                   \
+               if($1=="outlet.2.status:")outlet2status=$2;                                   \
+               if($1=="ups.date:")upsdate=$2;                                                \
+               if($1=="ups.load:")upsload=$2;                                                \
+               if($1=="ups.model:"){                                                         \
+                 upsmodel=$2;                                                                \
+                 for(i=3;i<=NF;i++)                                                          \
+                   upsmodel=upsmodel " " $(i);}                                              \
+               if($1=="ups.power.nominal:")upspowernominal=$2;                               \
+               if($1=="ups.realpower:")upsrealpower=$2;                                      \
+               if($1=="ups.realpower.nominal:")upsrealpowernominal=$2;                       \
+               if($1=="ups.status:"){                                                        \
+                 for(i=2;i<=NF;i++){                                                         \
+                   if($(i)=="OL")myupsonbattery=0;                                           \
+                   if($(i)=="OB")myupsonbattery=1;                                           \
+                   if($(i)=="CHRG")myupscharging=1;                                          \
+                   if($(i)=="DISCHRG")myupsdischarging=1;                                    \
+                   if($(i)=="OFF")myupsisoff=1;}}                                            \
+               if($1=="ups.time:")upstime=$2;                                                \
+               next;}                                                                        \
+           END{s=upsmodel;                                                                   \
+               if(length(s)==0)s="Unknown UPS Model";                                        \
+               if(myupsisoff!=0){                                                            \
+                   s=sprintf("%s is OFF\n",s);                                               \
+                   printf("%s",s);                                                           \
+                   exit;}                                                                    \
+                 else{                                                                       \
+                   s=sprintf("%s on ",s);                                                    \
+                   if(myupsonbattery!=0)                                                     \
+                       s=sprintf("%sbattery\n",s);                                           \
+                     else                                                                    \
+                       s=sprintf("%sline\n",s);}                                             \
+               if((length(upsdate)!=0)&&(length(upstime)!=0))                                \
+                 s=sprintf("%sUPS time %s %s\n",s,upsdate,upstime);                          \
+               if(myupscharging!=0)                                                          \
+                 s=sprintf("%sCharging battery\n",s);                                        \
+               if(myupsdischarging!=0)                                                       \
+                 s=sprintf("%sDischarging battery\n",s);                                     \
+               s=sprintf("%sBattery charge %s %%\n",s,batterycharge);                        \
+               tt=batteryruntime-batteryruntimelow;                                          \
+               tc=batteryruntime*(batterycharge-batterychargelow);                           \
+               if(batterycharge>0)                                                           \
+                   tc=tc/batterycharge;                                                      \
+                 else                                                                        \
+                   tc=-(batteryruntimelow+1);                                                \
+               if(tt<tc)                                                                     \
+                   reasonremainingtime=1;                                                    \
+                 else                                                                        \
+                   reasonremainingtime=0;                                                    \
+               if(tt<0)                                                                      \
+                 tt=0;                                                                       \
+               if(tc<0)                                                                      \
+                 tc=0;                                                                       \
+               batteryruntime=batteryruntime/60.0;                                           \
+               batteryruntime=sprintf("%d",batteryruntime+0.5);                              \
+               s=sprintf("%sBattery runtime %s min\n",s,batteryruntime);                     \
+               if(reasonremainingtime!=0){                                                   \
+                   tt=tt/60.0;                                                               \
+                   tt=sprintf("%d",tt+0.5);                                                  \
+                   s=sprintf("%sShutdown command after %s min",s,tt);                        \
+                   batteryruntimelow=sprintf("%d",batteryruntimelow+0.5);                    \
+                   s=sprintf("%s due to remaining time of %s sec\n",s,batteryruntimelow);}   \
+                 else{                                                                       \
+                   tc=tc/60.0;                                                               \
+                   tc=sprintf("%d",tc+0.5);                                                  \
+                   s=sprintf("%sShutdown command after %s min",s,tc);                        \
+                   batterychargelow=sprintf("%d",batterychargelow+0.5);                      \
+                   s=sprintf("%s due to remaining capacity of %s %%\n",s,batterychargelow);} \
+               s=sprintf("%sLoad %d %%\n",s,upsload);                                        \
+               if(upsload==0)                                                                \
+                 upsrealpower=0;                                                             \
+               s=sprintf("%sReal output power %s W\n",s,upsrealpower);                       \
+               o="";                                                                         \
+               for(i=1;i<=length(outlet1status);i++){                                        \
+                 c=substr(outlet1status,i,1);                                                \
+                 j=index("abcdefghijklmnopqrstuvwxyz",c);                                    \
+                 if(j>0)c=substr("ABCDEFGHIJKLMNOPQRSTUVWXYZ",j,1);                          \
+                 o=o c;}                                                                     \
+               outlet1status=o;                                                              \
+               if(length(outlet1status)!=0)                                                  \
+                 s=sprintf("%sOutlet 1 status %s\n",s,outlet1status);                        \
+               o="";                                                                         \
+               for(i=1;i<=length(outlet2status);i++){                                        \
+                 c=substr(outlet2status,i,1);                                                \
+                 j=index("abcdefghijklmnopqrstuvwxyz",c);                                    \
+                 if(j>0)c=substr("ABCDEFGHIJKLMNOPQRSTUVWXYZ",j,1);                          \
+                 o=o c;}                                                                     \
+               outlet2status=o;                                                              \
+               if(length(outlet2status)!=0)                                                  \
+                 s=sprintf("%sOutlet 2 status %s\n",s,outlet2status);                        \
+               if(ambienttemperature+100>0)                                                  \
+                 s=sprintf("%sCabinet exhaust air temperature %s C\n",s,ambienttemperature); \
+               if(ambienthumidity+1>0)                                                       \
+                 s=sprintf("%sCabinet exhaust air humidity %s %%\n",s,ambienthumidity);      \
+               printf("%s",s);}'
+
+exit 0
+

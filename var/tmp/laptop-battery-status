@@ -1,0 +1,15 @@
+battery.charge.low: 20
+battery.charge: 82
+battery.energy.design: 57.7
+battery.runtime.low: 300
+battery.runtime: 12610
+battery.type: Li-ion
+battery.voltage: 3.6
+device.mfr: Sony Corp
+device.model: VGP-BPS13
+ups.load: 100
+ups.mfr: Sony Corp
+ups.model: VGP-BPS13
+ups.power: 13.5
+ups.realpower: 13.5
+ups.status: OB DISCHRG

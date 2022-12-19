@@ -1,0 +1,203 @@
+#!/bin/sh
+
+unset LANG LANGUAGE LC_ALL
+LC_ALL=C
+export LC_ALL
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+# Updated for Linux 4.9.0.
+
+iguessed=1000000
+
+# On our own laptops, we know the things somewhat better.
+# The value of `iguessed' is determined such that, for a typical workload,
+# the `ups.power' entry in `/var/tmp/laptop-battery-status' does not
+# significantly change when switching between `charging' and `discharging'.
+
+test `uname -n` = "sina"  && iguessed=420000  || : # HP EliteBook 840 G3
+test `uname -n` = "sleon" && iguessed=3600000 || : # SONY VAIO VGN-BZ11EN
+test `uname -n` = "smobi" && iguessed=2500000 || : # Compaq NX9000 with a P4M at 2 GHz
+test `uname -n` = "srosa" && iguessed=1700000 || : # EeePC 1000H
+
+convertandwrite()
+{
+  echo "${1}"                                                                            \
+    | tr '=;' ' \012'                                                                    \
+    | gawk 'BEGIN{chargepercentage=0;chargepercentageset=0;chargefull=0;chargefullset=0; \
+                  chargenow=0;chargenowset=0;currentguessed=0;currentguessedset=0;       \
+                  currentnow=0;currentnowset=0;energyfull=0;energyfullset=0;             \
+                  energynow=0;energynowset=0;online=0;onlineset=0;                       \
+                  powernow=0;powernowset=0;present=0;presentset=0;                       \
+                  status="";voltagenow=0;voltagenowset=0;}                               \
+                 {if(NF<2)next;                                                          \
+                  if($1=="POWER_SUPPLY_CAPACITY"){                                       \
+                    chargepercentage=$2;chargepercentageset=1;next;}                     \
+                  if($1=="POWER_SUPPLY_CHARGE_FULL"){                                    \
+                    chargefull=$2;chargefullset=1;next;}                                 \
+                  if($1=="POWER_SUPPLY_CHARGE_FULL_DESIGN"){                             \
+                    printf("battery.capacity: %.1f\n",$2*1.0e-6);                        \
+                    printf("battery.capacity.design: %.1f\n",$2*1.0e-6);                 \
+                    next;}                                                               \
+                  if($1=="POWER_SUPPLY_CHARGE_NOW"){                                     \
+                    chargenow=$2;chargenowset=1;next;}                                   \
+                  if($1=="POWER_SUPPLY_CURRENT_GUESSED"){                                \
+                    currentguessed=$2;currentguessedset=1;next;}                         \
+                  if($1=="POWER_SUPPLY_CURRENT_NOW"){                                    \
+                    currentnow=$2;currentnowset=1;next;}                                 \
+                  if($1=="POWER_SUPPLY_ENERGY_FULL"){                                    \
+                    energyfull=$2;energyfullset=1;next;}                                 \
+                  if($1=="POWER_SUPPLY_ENERGY_FULL_DESIGN"){                             \
+                    printf("battery.energy.design: %.1f\n",$2*1.0e-6);                   \
+                    next;}                                                               \
+                  if($1=="POWER_SUPPLY_ENERGY_NOW"){                                     \
+                    energynow=$2;energynowset=1;next;}                                   \
+                  if($1=="POWER_SUPPLY_MANUFACTURER"){                                   \
+                    s=$2;for(i=3;i<=NF;i++)s=s " " $(i);                                 \
+                    printf("device.mfr: %s\n",s);                                        \
+                    printf("ups.mfr: %s\n",s);                                           \
+                    next;}                                                               \
+                  if($1=="POWER_SUPPLY_MODEL_NAME"){                                     \
+                    s=$2;for(i=3;i<=NF;i++)s=s " " $(i);                                 \
+                    printf("device.model: %s\n",s);                                      \
+                    printf("ups.model: %s\n",s);                                         \
+                    next;}                                                               \
+                  if($1=="POWER_SUPPLY_ONLINE"){                                         \
+                    online=$2;onlineset=1;next;}                                         \
+                  if($1=="POWER_SUPPLY_POWER_NOW"){                                      \
+                    if($2>-0.25&&$2<0.25){                                               \
+                      if(onlineset==0){online=1;onlineset=1;}                            \
+                      next;}                                                             \
+                    powernow=$2;powernowset=1;next;}                                     \
+                  if($1=="POWER_SUPPLY_PRESENT"){                                        \
+                    present=$2;presentset=1;next;}                                       \
+                  if($1=="POWER_SUPPLY_STATUS"){                                         \
+                    if($2=="Charging"){                                                  \
+                      if(length(status)!=0)status=status " ";                            \
+                      status=status "CHRG";                                              \
+                      next;}                                                             \
+                    if($2=="Discharging"){                                               \
+                      if(length(status)!=0)status=status " ";                            \
+                      status=status "DISCHRG";                                           \
+                      next;}}                                                            \
+                  if($1=="POWER_SUPPLY_TECHNOLOGY"){                                     \
+                    s=$2;for(i=3;i<=NF;i++)s=s " " $(i);                                 \
+                    printf("battery.type: %s\n",s);                                      \
+                    next;}                                                               \
+                  if($1=="POWER_SUPPLY_VOLTAGE_NOW"){                                    \
+                    voltagenow=$2;voltagenowset=1;next;}                                 \
+                  next;}                                                                 \
+              END{rempercentlim=20;remsecslim=300;                                       \
+                  if(onlineset!=0){                                                      \
+                    if(online!=0){                                                       \
+                        if(length(status)!=0)status=" " status;                          \
+                        status="OL" status;}                                             \
+                      else{                                                              \
+                        if(length(status)!=0)status=" " status;                          \
+                        status="OB" status;}}                                            \
+                  if(present==0)                                                         \
+                      status="OFF";                                                      \
+                    else{                                                                \
+                      if(voltagenowset!=0)voltagenow=voltagenow*1.0e-6;                  \
+                      printf("battery.voltage: %.1f\n",voltagenow);                      \
+                      if(online!=0){                                                     \
+                        currentnow=0;currentnowset=0;}                                   \
+                      if(currentnowset==0){                                              \
+                        currentnow=currentguessed;currentnowset=1;}                      \
+                      if(powernowset==0&&voltagenowset!=0){                              \
+                        powernow=voltagenow*currentnow;powernowset=1;}                   \
+                      if(powernowset!=0){                                                \
+                        printf("ups.power: %.1f\n",powernow*1.0e-6);                     \
+                        printf("ups.realpower: %.1f\n",powernow*1.0e-6);}                \
+                      printf("ups.load: 100\n");                                         \
+                      rempercentset=0;                                                   \
+                      if(chargepercentageset!=0){                                        \
+                        rempercent=chargepercentage;rempercentset=1;}                    \
+                      if(rempercentset==0&&chargenowset!=0&&chargefullset!=0){           \
+                        if(chargefull<-0.25||chargefull>0.25){                           \
+                          rempercent=1.0e+2*chargenow/chargefull;rempercentset=1;}}      \
+                      if(rempercentset==0&&energynowset!=0&&energyfullset!=0){           \
+                        if(energyfull<-0.25||energyfull>0.25){                           \
+                          rempercent=1.0e+2*energynow/energyfull;rempercentset=1;}}      \
+                      if(rempercentset==0){                                              \
+                        rempercent=100;rempercentset=1;}                                 \
+                      printf("battery.charge: %d\n",rempercent);                         \
+                      remsecsset=0;                                                      \
+                      if(chargenowset!=0&&currentnowset!=0){                             \
+                        if(currentnow<-0.25||currentnow>0.25){                           \
+                          remsecs=3.6e+3*chargenow/currentnow;remsecsset=1;}}            \
+                      if(remsecsset==0&&energynowset!=0&&powernowset!=0){                \
+                        if(powernow<-0.25||powernow>0.25){                               \
+                          remsecs=3.6e+3*energynow/powernow;remsecsset=1;}}              \
+                      if(remsecsset==0){                                                 \
+                        remsecs=remsecslim+1;remsecsset=1;}                              \
+                      printf("battery.runtime: %d\n",remsecs);                           \
+                      if(rempercent<rempercentlim||remsecs<remsecslim){                  \
+                        if(length(status)!=0)status=status " ";                          \
+                        status=status "LB";}                                             \
+                      if(remsecs<remsecslim||rempercent<rempercentlim){                  \
+                        if(length(status)!=0)status=status " ";                          \
+                        status=status "LB";}}                                            \
+                  printf("battery.charge.low: %d\n",rempercentlim);                      \
+                  printf("battery.runtime.low: %d\n",remsecslim);                        \
+                  if(length(status)!=0)                                                  \
+                    printf("ups.status: %s\n",status);                                   \
+                  }'                                                                     \
+    | sort > /var/tmp/laptop-battery-status
+  chmod 644 /var/tmp/laptop-battery-status
+  return 0
+}
+
+# create stub file as the last resort
+txt=""
+txt="${txt}POWER_SUPPLY_CAPACITY=75;"
+txt="${txt}POWER_SUPPLY_CHARGE_FULL=6400000;"
+txt="${txt}POWER_SUPPLY_CHARGE_FULL_DESIGN=6400000;"
+txt="${txt}POWER_SUPPLY_CHARGE_NOW=4800000;"
+txt="${txt}POWER_SUPPLY_CURRENT_GUESSED=400000;"
+txt="${txt}POWER_SUPPLY_CURRENT_NOW=400000;"
+txt="${txt}POWER_SUPPLY_ENERGY_FULL=97280000;"
+txt="${txt}POWER_SUPPLY_ENERGY_FULL_DESIGN=97280000;"
+txt="${txt}POWER_SUPPLY_ENERGY_NOW=72960000;"
+txt="${txt}POWER_SUPPLY_MANUFACTURER=Enyola Tech;"
+txt="${txt}POWER_SUPPLY_MODEL_NAME=GSG-0815;"
+txt="${txt}POWER_SUPPLY_ONLINE=1;"
+txt="${txt}POWER_SUPPLY_POWER_NOW=6080000;"
+txt="${txt}POWER_SUPPLY_PRESENT=1;"
+txt="${txt}POWER_SUPPLY_STATUS=Charging;"
+txt="${txt}POWER_SUPPLY_TECHNOLOGY=Li-ion;"
+txt="${txt}POWER_SUPPLY_VOLTAGE_NOW=15200000;"
+convertandwrite "${txt}"
+
+acpath=""
+btpath=""
+for d in /sys/class/power_supply/AC   \
+         /sys/class/power_supply/ACAD \
+         /sys/class/power_supply/?*[0-9] ; do
+  test -d "${d}" || continue
+  type=`cat ${d}/type 2>/dev/null || :`
+  test "${type}" = "Mains"   && acpath="${d}" || :
+  test "${type}" = "Battery" && btpath="${d}" || :
+  done
+test -z "${acpath}" && exit || :
+test -z "${btpath}" && exit || :
+acpathuevent="${acpath}/uevent"
+btpathuevent="${btpath}/uevent"
+
+while : ; do
+  acuevent=`cat ${acpathuevent} 2>/dev/null || :`
+  btuevent=`cat ${btpathuevent} 2>/dev/null || :`
+  test -z "${acuevent}" && exit || :
+  test -z "${btuevent}" && exit || :
+  txt=""
+  txt="${txt}${acuevent};"
+  txt="${txt}${btuevent};"
+  txt="${txt}POWER_SUPPLY_CURRENT_GUESSED=${iguessed};"
+  txt=`echo "${txt}" | tr '\012' ';'`
+  convertandwrite "${txt}"
+  sleep 13
+  done
+
+exit 0
+
