@@ -9,6 +9,10 @@ export PATH
 
 ups="ups1@localhost"
 
+upsrealpowernominal=0
+desc=`upsc -L 2>/dev/null`
+test "${desc}" = "ups1: Green Cell UPS Microsine 1000VA LCD 700W 230V Pure Sinusoid" && upsrealpowernominal=700 || :
+
 upsc=`upsc ${ups} 2>&1` || exit 1
 
 echo "${upsc}"                                                                               \
@@ -27,7 +31,7 @@ echo "${upsc}"                                                                  
                upsmodel="";                                                                  \
                upspowernominal=0;                                                            \
                upsrealpower=0;                                                               \
-               upsrealpowernominal=0;                                                        \
+               upsrealpowernominal='"${upsrealpowernominal}"';                               \
                upsstatus="";                                                                 \
                upstime="";                                                                   \
                myupsonbattery=0;                                                             \
@@ -47,6 +51,10 @@ echo "${upsc}"                                                                  
                if($1=="ups.date:")upsdate=$2;                                                \
                if($1=="ups.load:")upsload=$2;                                                \
                if($1=="ups.model:"){                                                         \
+                 upsmodel=$2;                                                                \
+                 for(i=3;i<=NF;i++)                                                          \
+                   upsmodel=upsmodel " " $(i);}                                              \
+               if($1=="driver.parameter.product:"&&length(upsmodel)==0){                     \
                  upsmodel=$2;                                                                \
                  for(i=3;i<=NF;i++)                                                          \
                    upsmodel=upsmodel " " $(i);}                                              \
@@ -110,10 +118,14 @@ echo "${upsc}"                                                                  
                    s=sprintf("%sShutdown command after %s min",s,tc);                        \
                    batterychargelow=sprintf("%d",batterychargelow+0.5);                      \
                    s=sprintf("%s due to remaining capacity of %s %%\n",s,batterychargelow);} \
-               s=sprintf("%sLoad %d %%\n",s,upsload);                                        \
-               if(upsload==0)                                                                \
-                 upsrealpower=0;                                                             \
-               s=sprintf("%sReal output power %s W\n",s,upsrealpower);                       \
+               s=sprintf("%sLoad %d %%\n",s,upsload+0);                                      \
+               if(upsload+0.5>0&&upsload-0.5<0){                                             \
+                 upsload=0;                                                                  \
+                 upsrealpower=0;}                                                            \
+               if(upsrealpower+0.5>0&&upsrealpower-0.5<0)                                    \
+                 upsrealpower=upsrealpowernominal*upsload/100.0;                             \
+               if(upsrealpower+0.5<0||upsrealpower-0.5>0)                                    \
+                 s=sprintf("%sReal output power %s W\n",s,upsrealpower "");                  \
                o="";                                                                         \
                for(i=1;i<=length(outlet1status);i++){                                        \
                  c=substr(outlet1status,i,1);                                                \
@@ -139,4 +151,3 @@ echo "${upsc}"                                                                  
                printf("%s",s);}'
 
 exit 0
-
